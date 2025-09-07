@@ -4,6 +4,8 @@ ProtonFlow allows the execution of BPMN 2.0 processes in .NET applications. It s
 
 It is In-Memory only currently, but an interface is available for other stores implementations.
 
+Please beware, that large parts of this package have been written by AI, with some manual refactoring to ensure architectural quality and making sure that tests were written for several use-cases.
+
 ## Quick start:
 
 var engine = BpmnEngine.Engine.BpmnEngineBuilder.Create()
