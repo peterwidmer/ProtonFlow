@@ -1,0 +1,86 @@
+name: .NET CI and Release
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+    branches: ["master", "main"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'SemVer version for the package (e.g., 1.0.0)'
+        required: true
+        type: string
+      release_notes:
+        description: 'Optional release notes for GitHub release'
+        required: false
+        type: string
+
+jobs:
+  build_and_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+  pack_and_publish:
+    name: Pack and Publish to NuGet
+    if: github.event_name == 'workflow_dispatch'
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Pack
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Packing ProtonFlow.BpmnEngine with version $VERSION"
+          dotnet pack ProtonFlow.BpmnEngine/ProtonFlow.BpmnEngine.csproj -c Release -o out \
+            /p:PackageVersion=$VERSION \
+            /p:ContinuousIntegrationBuild=true
+
+      - name: Publish to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "NUGET_PETERWIDMER" ]; then
+            echo "Missing NUGET_PETERWIDMER secret" && exit 1
+          fi
+          dotnet nuget push "out/*.nupkg" \
+            --api-key "NUGET_PETERWIDMER" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --skip-duplicate
+
+      - name: Create GitHub Release (optional)
+        if: ${{ github.event.inputs.release_notes != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: ProtonFlow v${{ github.event.inputs.version }}
+          body: ${{ github.event.inputs.release_notes }}

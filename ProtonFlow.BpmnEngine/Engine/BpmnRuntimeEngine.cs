@@ -27,7 +27,7 @@ public class BpmnRuntimeEngine
         string xml;
         if (System.IO.File.Exists(xmlOrPath))
         {
-            xml = await System.IO.File.ReadAllTextAsync(xmlOrPath);
+            xml = System.IO.File.ReadAllText(xmlOrPath);
         }
         else
         {
@@ -69,11 +69,11 @@ public class BpmnRuntimeEngine
         }
 
         var def = new ProcessDefinition(
-            Id: Guid.NewGuid().ToString("n"),
-            Key: key,
-            Name: process.Attribute("name")?.Value ?? key,
-            Xml: xml,
-            Elements: elements
+            id: Guid.NewGuid().ToString("n"),
+            key: key,
+            name: process.Attribute("name")?.Value ?? key,
+            xml: xml,
+            elements: elements
         );
         await _processStore.SaveAsync(def);
         return def;

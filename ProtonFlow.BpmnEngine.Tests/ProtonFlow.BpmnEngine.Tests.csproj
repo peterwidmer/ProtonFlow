@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ProtonFlowEngine\ProtonFlowEngine.csproj" />
+    <ProjectReference Include="..\ProtonFlow.BpmnEngine\ProtonFlow.BpmnEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

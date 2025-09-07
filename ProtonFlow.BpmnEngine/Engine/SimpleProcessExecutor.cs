@@ -210,7 +210,7 @@ public class SimpleProcessExecutor : IProcessExecutor
                 var handler = handlers?.FirstOrDefault(h => string.Equals(h.Type, type, StringComparison.OrdinalIgnoreCase));
                 if (handler != null)
                 {
-                    var ctx = new TaskContext { Instance = instance, ElementId = token };
+                    var ctx = new TaskContext(instance, elementId: token);
                     await handler.ExecuteAsync(ctx, ct);
                 }
             }

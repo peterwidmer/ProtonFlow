@@ -4,8 +4,15 @@ using BpmnEngine.Models;
 
 public class TaskContext
 {
-    public required ProcessInstance Instance { get; init; }
-    public required string ElementId { get; init; }
+    public ProcessInstance Instance { get; set; }
+    public string ElementId { get; set; }
+
+    public TaskContext(ProcessInstance instance, string elementId)
+    {
+        Instance = instance;
+        ElementId = elementId;
+    }
+
     public T? GetVariable<T>(string name)
     {
         if (Instance.Variables.TryGetValue(name, out var value) && value is T t)
