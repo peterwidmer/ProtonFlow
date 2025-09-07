@@ -8,6 +8,7 @@ Please beware, that large parts of this package have been written by AI, with so
 
 ## Quick start:
 
+```csharp
 var engine = BpmnEngine.Engine.BpmnEngineBuilder.Create()
     .UseInMemory()
     .AddTaskHandler("rest-call", async ctx => {
@@ -26,6 +27,7 @@ while (simulator.CanStep)
     await simulator.StepAsync();
 
 var positions = await engine.GetCurrentTokenPositions(instance.Id);
+```
 
 ## Supported BPMN Elements
 
