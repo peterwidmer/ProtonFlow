@@ -7,6 +7,14 @@ on:
     branches: ["master", "main"]
   workflow_dispatch:
     inputs:
+      package:
+        description: 'Package to release (engine | efcore)'
+        required: true
+        type: choice
+        options:
+          - engine
+          - efcore
+        default: engine
       version:
         description: 'SemVer version for the package (e.g., 1.0.0)'
         required: true
@@ -57,23 +65,36 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      - name: Pack
+      - name: Pack Selected Package
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+          PACKAGE: ${{ github.event.inputs.package }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          echo "Packing ProtonFlow.BpmnEngine with version $VERSION"
-          dotnet pack ProtonFlow.BpmnEngine/ProtonFlow.BpmnEngine.csproj -c Release -o out \
-            /p:PackageVersion=$VERSION \
-            /p:ContinuousIntegrationBuild=true
+          echo "Requested package: $PACKAGE version: $VERSION"
+          if [ "$PACKAGE" = "engine" ]; then
+            echo "Packing ProtonFlow.BpmnEngine"
+            dotnet pack ProtonFlow.BpmnEngine/ProtonFlow.BpmnEngine.csproj -c Release -o out \
+              /p:PackageVersion=$VERSION \
+              /p:ContinuousIntegrationBuild=true
+          elif [ "$PACKAGE" = "efcore" ]; then
+            echo "Packing ProtonFlow.Persistence.EfCore"
+            dotnet pack ProtonFlow.Persistence.EfCore/ProtonFlow.Persistence.EfCore.csproj -c Release -o out \
+              /p:PackageVersion=$VERSION \
+              /p:ContinuousIntegrationBuild=true
+          else
+            echo "Unknown package $PACKAGE" && exit 1
+          fi
+          ls -1 out
 
       - name: Publish to NuGet.org
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ secrets.NUGET_PETERWIDMER }}
         run: |
-          if [ -z "NUGET_PETERWIDMER" ]; then
-            echo "Missing NUGET_PETERWIDMER secret" && exit 1
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "Missing NUGET_API_KEY secret" && exit 1
           fi
           dotnet nuget push "out/*.nupkg" \
-            --api-key "NUGET_PETERWIDMER" \
+            --api-key "$NUGET_API_KEY" \
             --source "https://api.nuget.org/v3/index.json" \
             --skip-duplicate
 
@@ -81,6 +102,6 @@ jobs:
         if: ${{ github.event.inputs.release_notes != '' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.event.inputs.version }}
-          name: ProtonFlow v${{ github.event.inputs.version }}
+          tag_name: v${{ github.event.inputs.version }}-${{ github.event.inputs.package }}
+          name: ProtonFlow ${{ github.event.inputs.package }} v${{ github.event.inputs.version }}
           body: ${{ github.event.inputs.release_notes }}

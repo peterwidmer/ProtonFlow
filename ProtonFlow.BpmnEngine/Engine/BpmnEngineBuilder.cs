@@ -20,6 +20,16 @@ public class BpmnEngineBuilder
         return this;
     }
 
+    /// <summary>
+    /// Allows advanced scenarios (like EF Core persistence extension package) to configure services directly
+    /// without modifying core engine assembly. The provided delegate receives the underlying <see cref="IServiceCollection"/>.
+    /// </summary>
+    public BpmnEngineBuilder ConfigureServices(Action<IServiceCollection> configure)
+    {
+        configure(_services);
+        return this;
+    }
+
     public BpmnEngineBuilder AddTaskHandler(string type, Func<BpmnEngine.Runtime.TaskContext, Task> handler)
     {
         _services.AddSingleton<ITaskHandler>(new DelegatedTaskHandler(type, handler));

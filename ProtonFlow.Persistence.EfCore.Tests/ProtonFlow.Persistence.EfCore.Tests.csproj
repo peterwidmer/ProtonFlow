@@ -12,6 +12,13 @@
 	  <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
 	  <PackageReference Include="MSTest.TestAdapter" Version="3.10.4" />
 	  <PackageReference Include="MSTest.TestFramework" Version="3.10.4" />
+	  <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
+	  <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
+	  <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProtonFlow.Persistence.EfCore\ProtonFlow.Persistence.EfCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

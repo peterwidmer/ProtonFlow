@@ -4,6 +4,33 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>ProtonFlow.Persistence.EfCore</PackageId>
+    <Title>ProtonFlow Persistence EF Core</Title>
+    <Description>Entity Framework Core based durable persistence provider for ProtonFlow BPMN engine (process definitions, instances, KPIs).</Description>
+    <Authors>Peter Widmer</Authors>
+    <PackageTags>BPMN;Workflow;Process;EFCore;Persistence;KPI;ProtonFlow</PackageTags>
+    <RepositoryUrl>https://github.com/peterwidmer/ProtonFlow</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/peterwidmer/ProtonFlow</PackageProjectUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageOutputPath>../../out</PackageOutputPath>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProtonFlow.BpmnEngine\ProtonFlow.BpmnEngine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
+  </ItemGroup>
 
 </Project>
