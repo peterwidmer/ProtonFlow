@@ -10,6 +10,10 @@
 		<Description>BPMN engine with extensible task handlers and simulation support.</Description>
 		<Authors>Peter Widmer</Authors>
 		<LangVersion>Latest</LangVersion>
+		<RepositoryUrl>https://github.com/peterwidmer/ProtonFlow</RepositoryUrl>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 	</PropertyGroup>
 
 	<ItemGroup>
