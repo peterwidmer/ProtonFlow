@@ -65,20 +65,24 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      - name: Pack Selected Package
+      - name: Build and Pack Selected Package
         env:
           VERSION: ${{ github.event.inputs.version }}
           PACKAGE: ${{ github.event.inputs.package }}
         run: |
           echo "Requested package: $PACKAGE version: $VERSION"
           if [ "$PACKAGE" = "engine" ]; then
+            echo "Building ProtonFlow.BpmnEngine"
+            dotnet build ProtonFlow.BpmnEngine/ProtonFlow.BpmnEngine.csproj -c Release --no-restore
             echo "Packing ProtonFlow.BpmnEngine"
-            dotnet pack ProtonFlow.BpmnEngine/ProtonFlow.BpmnEngine.csproj -c Release -o out \
+            dotnet pack ProtonFlow.BpmnEngine/ProtonFlow.BpmnEngine.csproj -c Release --no-build -o out \
               /p:PackageVersion=$VERSION \
               /p:ContinuousIntegrationBuild=true
           elif [ "$PACKAGE" = "efcore" ]; then
+            echo "Building ProtonFlow.Persistence.EfCore"
+            dotnet build ProtonFlow.Persistence.EfCore/ProtonFlow.Persistence.EfCore.csproj -c Release --no-restore
             echo "Packing ProtonFlow.Persistence.EfCore"
-            dotnet pack ProtonFlow.Persistence.EfCore/ProtonFlow.Persistence.EfCore.csproj -c Release -o out \
+            dotnet pack ProtonFlow.Persistence.EfCore/ProtonFlow.Persistence.EfCore.csproj -c Release --no-build -o out \
               /p:PackageVersion=$VERSION \
               /p:ContinuousIntegrationBuild=true
           else
