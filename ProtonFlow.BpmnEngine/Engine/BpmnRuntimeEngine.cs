@@ -5,6 +5,7 @@ using BpmnEngine.Interfaces;
 using BpmnEngine.Models;
 using BpmnEngine.Runtime;
 using Microsoft.Extensions.DependencyInjection;
+using System;
 
 public class BpmnRuntimeEngine
 {
@@ -12,13 +13,18 @@ public class BpmnRuntimeEngine
     private readonly IInstanceStore _instanceStore;
     private readonly IProcessExecutor _executor;
     private readonly IEnumerable<ITaskHandler> _taskHandlers;
+    private readonly IJobStore? _jobStore;
 
-    public BpmnRuntimeEngine(IProcessStore processStore, IInstanceStore instanceStore, IProcessExecutor executor, IEnumerable<ITaskHandler> taskHandlers)
+    public IServiceProvider Services { get; internal set; } = default!;
+
+    public BpmnRuntimeEngine(IProcessStore processStore, IInstanceStore instanceStore, IProcessExecutor executor, IEnumerable<ITaskHandler> taskHandlers, IServiceProvider services)
     {
         _processStore = processStore;
         _instanceStore = instanceStore;
         _executor = executor;
         _taskHandlers = taskHandlers;
+        _jobStore = services.GetService<IJobStore>();
+        Services = services;
     }
 
     public async Task<ProcessDefinition> LoadBpmnXml(string xmlOrPath)
@@ -84,6 +90,20 @@ public class BpmnRuntimeEngine
         var def = await _processStore.GetByKeyAsync(processKey, ct) ?? throw new InvalidOperationException($"Process '{processKey}' not found");
         var instance = await _executor.StartAsync(def, variables, ct);
         await _instanceStore.SaveAsync(instance, ct);
+
+        // If the process has tokens to continue later, enqueue a job (if job store is available)
+        if (!instance.IsCompleted && instance.ActiveTokens.Count > 0 && _jobStore != null)
+        {
+            await _jobStore.EnqueueJobAsync(new BpmnEngine.Interfaces.Job
+            {
+                Id = Guid.NewGuid(),
+                Type = "continue-instance",
+                ProcessInstanceId = instance.Id,
+                RunAt = DateTimeOffset.UtcNow,
+                Attempt = 0
+            }, ct);
+        }
+
         return instance;
     }
 
@@ -114,5 +134,17 @@ public class BpmnRuntimeEngine
         var inst = await _instanceStore.GetByIdAsync(instanceId, ct) ?? throw new InvalidOperationException("Instance not found");
         await _executor.StepAsync(inst, ct);
         await _instanceStore.SaveAsync(inst, ct);
+
+        if (!inst.IsCompleted && inst.ActiveTokens.Count > 0 && _jobStore != null)
+        {
+            await _jobStore.EnqueueJobAsync(new BpmnEngine.Interfaces.Job
+            {
+                Id = Guid.NewGuid(),
+                Type = "continue-instance",
+                ProcessInstanceId = inst.Id,
+                RunAt = DateTimeOffset.UtcNow,
+                Attempt = 0
+            }, ct);
+        }
     }
 }

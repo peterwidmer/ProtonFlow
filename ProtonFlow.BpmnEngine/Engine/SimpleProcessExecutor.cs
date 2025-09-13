@@ -6,6 +6,21 @@ using BpmnEngine.Runtime;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
+/// <summary>
+/// Default implementation of <see cref="IProcessExecutor"/> that provides BPMN-compliant process execution.
+/// 
+/// This executor handles:
+/// - Token-based execution model following BPMN semantics
+/// - Service task execution with registered handlers
+/// - Exclusive gateway conditional routing with default flows
+/// - Parallel gateway fork/join coordination with proper synchronization
+/// - Simple expression evaluation for sequence flow conditions
+/// - Simulation mode support for testing without side effects
+/// 
+/// The implementation parses BPMN XML dynamically for each step to maintain flexibility
+/// and support hot deployment scenarios. Token movement follows standard BPMN rules
+/// where tokens are consumed at their current position and produced at target elements.
+/// </summary>
 /*
 Pseudocode (refactor plan)
 - Keep StartAsync and CanStep unchanged.
@@ -84,11 +99,18 @@ public class SimpleProcessExecutor : IProcessExecutor
         UpdateCompletion(instance, processDefinition);
     }
 
+    /// <summary>
+    /// Locates the BPMN process element within the definitions document.
+    /// </summary>
     private static XElement GetProcessElement(XDocument xdoc)
     {
         return xdoc.Root!.Descendants().First(e => e.Name.LocalName == "process");
     }
 
+    /// <summary>
+    /// Processes all active tokens in the instance, executing tasks and determining new token positions.
+    /// This is the core execution logic that implements BPMN token semantics.
+    /// </summary>
     private async Task<HashSet<string>> ProcessActiveTokensAsync(ProcessInstance instance, XElement xproc, CancellationToken ct)
     {
         var newTokens = new HashSet<string>();
@@ -197,6 +219,10 @@ public class SimpleProcessExecutor : IProcessExecutor
         return element.Name.LocalName == "parallelGateway";
     }
 
+    /// <summary>
+    /// Executes task handlers for service tasks, respecting simulation mode.
+    /// Script tasks are currently implemented as no-ops.
+    /// </summary>
     private async Task ExecuteTaskIfNeededAsync(ProcessInstance instance, XElement current, string token, CancellationToken ct)
     {
         var localName = current.Name.LocalName;
@@ -245,6 +271,10 @@ public class SimpleProcessExecutor : IProcessExecutor
             .Select(t => t!);
     }
 
+    /// <summary>
+    /// Resolves exclusive gateway routing by evaluating conditions in document order.
+    /// Falls back to default flow if no conditions match.
+    /// </summary>
     private static IEnumerable<string> ResolveExclusiveGatewayTargets(XElement gateway, List<XElement> outgoing, ProcessInstance instance)
     {
         // Evaluate conditional flows in document order; pick first true.
@@ -276,6 +306,11 @@ public class SimpleProcessExecutor : IProcessExecutor
         return flow.Descendants().Any(e => e.Name.LocalName == "conditionExpression");
     }
 
+    /// <summary>
+    /// Evaluates simple conditional expressions in the format: variable OPERATOR number.
+    /// Supports operators: ==, !=, >, >=, <, <=
+    /// Variables are resolved from the process instance variables.
+    /// </summary>
     private static bool EvaluateCondition(XElement flow, ProcessInstance instance)
     {
         var condEl = flow.Descendants().FirstOrDefault(e => e.Name.LocalName == "conditionExpression");
@@ -336,6 +371,10 @@ public class SimpleProcessExecutor : IProcessExecutor
         };
     }
 
+    /// <summary>
+    /// Adds a target token while properly accounting for parallel join coordination.
+    /// Increments the arrival counter for parallel gateways with multiple incoming flows.
+    /// </summary>
     private static void AddTargetWithParallelJoinAccounting(HashSet<string> newTokens, XElement xproc, string targetId, ProcessInstance instance)
     {
         var targetEl = FindElementById(xproc, targetId);
@@ -351,6 +390,9 @@ public class SimpleProcessExecutor : IProcessExecutor
         newTokens.Add(targetId);
     }
 
+    /// <summary>
+    /// Replaces the instance's active tokens with the new set of tokens.
+    /// </summary>
     private static void ReplaceActiveTokens(ProcessInstance instance, HashSet<string> newTokens)
     {
         instance.ActiveTokens.Clear();
@@ -360,6 +402,10 @@ public class SimpleProcessExecutor : IProcessExecutor
         }
     }
 
+    /// <summary>
+    /// Updates the instance completion status based on token positions.
+    /// The instance is completed when there are no active tokens or all tokens are at end events.
+    /// </summary>
     private static void UpdateCompletion(ProcessInstance instance, ProcessDefinition def)
     {
         if (instance.ActiveTokens.Count == 0 ||

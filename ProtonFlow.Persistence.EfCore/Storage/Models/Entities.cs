@@ -136,3 +136,18 @@ public class InstanceNote
     /// <summary>Free-form textual content (short; for large payloads a dedicated audit log extension can be added).</summary>
     public string Message { get; set; } = null!;
 }
+
+/// <summary>
+/// Background work item used by HA-ready engine to resume or continue process instances asynchronously.
+/// </summary>
+public class Job
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Type { get; set; } = default!;
+    public string ProcessInstanceId { get; set; } = default!;
+    public DateTimeOffset? RunAt { get; set; }
+    public string? OwnerId { get; set; }
+    public DateTimeOffset? LockedUntil { get; set; }
+    public int Attempt { get; set; }
+    public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+}

@@ -4,6 +4,7 @@ using BpmnEngine.Interfaces;
 using BpmnEngine.Models;
 using BpmnEngine.Stores;
 using Microsoft.Extensions.DependencyInjection;
+using System;
 
 public class BpmnEngineBuilder
 {
@@ -38,7 +39,10 @@ public class BpmnEngineBuilder
 
     public BpmnRuntimeEngine Build()
     {
-        return _services.BuildServiceProvider().GetRequiredService<BpmnRuntimeEngine>();
+        var serviceProvider = _services.BuildServiceProvider();
+        var engine = serviceProvider.GetRequiredService<BpmnRuntimeEngine>();
+        engine.Services = serviceProvider;
+        return engine;
     }
 }
 

@@ -5,22 +5,15 @@ using ProtonFlow.Persistence.EfCore.Storage.Models;
 
 namespace ProtonFlow.Persistence.EfCore.Storage;
 
-/// <summary>
-/// EF Core implementation of <see cref="IBpmnStorage"/> providing durable persistence using a relational database (SQLite, SQL Server, etc.).
-/// The implementation focuses on correctness and clarity for MVP while leaving room for batching, caching and advanced optimizations.
-/// </summary>
 public class EfBpmnStorage : IBpmnStorage
 {
     private readonly ProtonFlowDbContext _db;
 
-    /// <summary>Create a new storage instance for a given DbContext.</summary>
     public EfBpmnStorage(ProtonFlowDbContext db) => _db = db;
 
     #region Definitions
-    /// <inheritdoc />
     public async Task<StoredProcessDefinition> SaveProcessDefinitionAsync(StoredProcessDefinition definition, CancellationToken ct = default)
     {
-        // Ensure version auto increment for same key when not specified
         if (definition.Version == 0)
         {
             var latest = await _db.ProcessDefinitions.Where(d => d.Key == definition.Key)
@@ -28,7 +21,6 @@ public class EfBpmnStorage : IBpmnStorage
             definition.Version = (latest?.Version ?? 0) + 1;
         }
 
-        // Mark previous latest records
         var previous = await _db.ProcessDefinitions.Where(d => d.Key == definition.Key && d.IsLatest).ToListAsync(ct);
         foreach (var p in previous) p.IsLatest = false;
 
@@ -43,11 +35,9 @@ public class EfBpmnStorage : IBpmnStorage
         return definition;
     }
 
-    /// <inheritdoc />
     public Task<StoredProcessDefinition?> GetProcessDefinitionByIdAsync(string id, CancellationToken ct = default)
         => _db.ProcessDefinitions.FirstOrDefaultAsync(d => d.Id == id, ct);
 
-    /// <inheritdoc />
     public Task<StoredProcessDefinition?> GetProcessDefinitionByKeyAsync(string key, int? version = null, CancellationToken ct = default)
     {
         var q = _db.ProcessDefinitions.Where(d => d.Key == key);
@@ -62,7 +52,6 @@ public class EfBpmnStorage : IBpmnStorage
         return q.OrderByDescending(d => d.Version).FirstOrDefaultAsync(ct);
     }
 
-    /// <inheritdoc />
     public async Task<IReadOnlyList<StoredProcessDefinition>> GetProcessDefinitionsAsync(string? key = null, CancellationToken ct = default)
     {
         var q = _db.ProcessDefinitions.AsQueryable();
@@ -72,28 +61,48 @@ public class EfBpmnStorage : IBpmnStorage
     #endregion
 
     #region Instances
-    /// <inheritdoc />
     public async Task<StoredProcessInstance> CreateProcessInstanceAsync(StoredProcessInstance instance, CancellationToken ct = default)
     {
         instance.LastUpdatedUtc = DateTime.UtcNow;
+        instance.RowVersion ??= new byte[] { 1 };
         _db.ProcessInstances.Add(instance);
         await _db.SaveChangesAsync(ct);
         return instance;
     }
 
-    /// <inheritdoc />
     public async Task UpdateProcessInstanceAsync(StoredProcessInstance instance, CancellationToken ct = default)
     {
         instance.LastUpdatedUtc = DateTime.UtcNow;
-        _db.ProcessInstances.Update(instance);
+        
+        // Detach any existing tracked entity with the same ID to avoid conflicts
+        var tracked = _db.ChangeTracker.Entries<StoredProcessInstance>()
+            .FirstOrDefault(e => e.Entity.Id == instance.Id);
+        if (tracked != null)
+        {
+            _db.Entry(tracked.Entity).State = EntityState.Detached;
+        }
+        
+        var entry = _db.Attach(instance);
+        entry.State = EntityState.Modified;
+        
+        var originalRowVersion = instance.RowVersion;
+        entry.Property(i => i.RowVersion).OriginalValue = originalRowVersion;
+        
+        // Let the provider handle updating the RowVersion
+        entry.Property(i => i.RowVersion).IsModified = false;
+
+        // Manually increment for SQLite which doesn't auto-update it
+        if (_db.Database.IsSqlite())
+        {
+            instance.RowVersion = Increment(instance.RowVersion);
+        }
+        
         await _db.SaveChangesAsync(ct);
     }
 
-    /// <inheritdoc />
     public Task<StoredProcessInstance?> GetProcessInstanceByIdAsync(string id, CancellationToken ct = default)
-        => _db.ProcessInstances.Include(i => i.StepExecutions).Include(i => i.Notes).FirstOrDefaultAsync(i => i.Id == id, ct);
+        => _db.ProcessInstances.AsNoTracking().Include(i => i.StepExecutions).Include(i => i.Notes).FirstOrDefaultAsync(i => i.Id == id, ct);
 
-    /// <inheritdoc />
     public async Task<IReadOnlyList<StoredProcessInstance>> QueryProcessInstancesAsync(ProcessInstanceQuery query, CancellationToken ct = default)
     {
         var q = _db.ProcessInstances.AsQueryable();
@@ -109,10 +118,8 @@ public class EfBpmnStorage : IBpmnStorage
     #endregion
 
     #region Step Executions
-    /// <inheritdoc />
     public async Task<StepExecutionRecord> AppendStepExecutionAsync(StepExecutionRecord record, CancellationToken ct = default)
     {
-        // Pre-calc duration if both timestamps known
         if (record.EndUtc.HasValue && record.StartUtc != default && !record.DurationMs.HasValue)
         {
             record.DurationMs = (long)(record.EndUtc.Value - record.StartUtc).TotalMilliseconds;
@@ -122,13 +129,11 @@ public class EfBpmnStorage : IBpmnStorage
         return record;
     }
 
-    /// <inheritdoc />
     public async Task<IReadOnlyList<StepExecutionRecord>> GetStepExecutionsAsync(string instanceId, CancellationToken ct = default)
         => await _db.StepExecutions.Where(s => s.InstanceId == instanceId).OrderBy(s => s.Sequence).ToListAsync(ct);
     #endregion
 
     #region KPI Aggregation
-    /// <inheritdoc />
     public async Task<IReadOnlyList<StepKpiAggregate>> QueryStepKpisAsync(StepKpiQuery query, CancellationToken ct = default)
     {
         var q = _db.StepExecutions.AsNoTracking().Where(s => s.EndUtc != null && s.DurationMs != null);
@@ -178,22 +183,20 @@ public class EfBpmnStorage : IBpmnStorage
     #endregion
 
     #region Status Transitions
-    /// <inheritdoc />
     public async Task MarkInstanceCancelledAsync(string instanceId, string? reason, DateTime utcNow, CancellationToken ct = default)
     {
-        var inst = await GetProcessInstanceByIdAsync(instanceId, ct) ?? throw new InvalidOperationException("Instance not found");
-        if (inst.Status == ProcessInstanceStatus.Completed) return; // no-op if already terminal
+        var inst = await _db.ProcessInstances.FirstOrDefaultAsync(i => i.Id == instanceId, ct) ?? throw new InvalidOperationException("Instance not found");
+        if (inst.Status == ProcessInstanceStatus.Completed) return;
         inst.Status = ProcessInstanceStatus.Cancelled;
         inst.CancellationReason = reason;
         inst.CancelledUtc = utcNow;
         await UpdateProcessInstanceAsync(inst, ct);
     }
 
-    /// <inheritdoc />
     public async Task MarkInstanceFailedAsync(string instanceId, string error, DateTime utcNow, CancellationToken ct = default)
     {
-        var inst = await GetProcessInstanceByIdAsync(instanceId, ct) ?? throw new InvalidOperationException("Instance not found");
-        if (inst.Status == ProcessInstanceStatus.Completed) return; // no-op if already terminal
+        var inst = await _db.ProcessInstances.FirstOrDefaultAsync(i => i.Id == instanceId, ct) ?? throw new InvalidOperationException("Instance not found");
+        if (inst.Status == ProcessInstanceStatus.Completed) return;
         inst.Status = ProcessInstanceStatus.Failed;
         inst.FailureReason = error;
         inst.FailedUtc = utcNow;
@@ -202,7 +205,6 @@ public class EfBpmnStorage : IBpmnStorage
     #endregion
 
     #region Notes
-    /// <inheritdoc />
     public async Task AddInstanceNoteAsync(InstanceNote note, CancellationToken ct = default)
     {
         _db.InstanceNotes.Add(note);
@@ -211,15 +213,25 @@ public class EfBpmnStorage : IBpmnStorage
     #endregion
 
     #region SaveChanges
-    /// <inheritdoc />
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
     #endregion
 
-    /// <summary>Computes SHA256 hash (hex) for supplied content.</summary>
     public static string ComputeHash(string content)
     {
         using var sha = SHA256.Create();
         var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(bytes);
+    }
+    
+    private static byte[] Increment(byte[]? value)
+    {
+        if (value == null || value.Length == 0) return new byte[] { 1 };
+        var copy = (byte[])value.Clone();
+        for (int i = copy.Length - 1; i >= 0; i--)
+        {
+            if (copy[i] < byte.MaxValue) { copy[i]++; break; }
+            copy[i] = 0;
+        }
+        return copy;
     }
 }

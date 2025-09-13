@@ -17,6 +17,8 @@ public class ProtonFlowDbContext : DbContext
     public DbSet<StepExecutionRecord> StepExecutions => Set<StepExecutionRecord>();
     /// <summary>Instance attached free-form notes.</summary>
     public DbSet<InstanceNote> InstanceNotes => Set<InstanceNote>();
+    /// <summary>Background jobs queue.</summary>
+    public DbSet<Job> Jobs => Set<Job>();
 
     /// <summary>Create a new DbContext with configured options (provider, connection etc.).</summary>
     public ProtonFlowDbContext(DbContextOptions<ProtonFlowDbContext> options) : base(options) { }
@@ -47,8 +49,8 @@ public class ProtonFlowDbContext : DbContext
             e.Property(x => x.VariablesJson).IsRequired();
             e.Property(x => x.ActiveTokensJson).IsRequired();
             e.Property(x => x.ParallelJoinWaitsJson).IsRequired();
-            // Configure concurrency token without requiring database-generated value (SQLite can't auto-populate rowversion)
-            e.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
+            // Use plain concurrency token so SQLite does not expect a DB-generated value
+            e.Property(x => x.RowVersion).IsConcurrencyToken();
             e.HasIndex(x => new { x.ProcessDefinitionId, x.Status });
             e.HasIndex(x => new { x.ProcessKey, x.Status, x.StartedUtc });
             e.HasIndex(x => x.BusinessCorrelationId);
@@ -87,6 +89,30 @@ public class ProtonFlowDbContext : DbContext
              .WithMany(i => i.Notes)
              .HasForeignKey(x => x.InstanceId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Jobs
+        b.Entity<Job>(entity =>
+        {
+            entity.ToTable("Jobs");
+            entity.HasKey(j => j.Id);
+
+            entity.Property(j => j.Type)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(j => j.Attempt)
+                .IsRequired();
+
+            // Concurrency token only; value is generated client-side when updating
+            entity.Property(j => j.RowVersion)
+                .IsConcurrencyToken();
+
+            entity.Property(j => j.ProcessInstanceId)
+                .IsRequired()
+                .HasMaxLength(64);
+
+            entity.HasIndex(j => new { j.RunAt, j.LockedUntil });
         });
     }
 }

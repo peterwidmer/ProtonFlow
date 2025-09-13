@@ -30,6 +30,9 @@ public class EfInstanceStore : IInstanceStore
             ProcessKey = instance.ProcessKey
         };
 
+        // Try to flow row version forward (for readers observing it). This does not enforce OCC in adapter path but preserves the value.
+        stored.RowVersion = instance.RowVersion;
+
         stored.VariablesJson = JsonSerializer.Serialize(instance.Variables, _json);
         stored.ActiveTokensJson = JsonSerializer.Serialize(instance.ActiveTokens, _json);
         stored.ParallelJoinWaitsJson = JsonSerializer.Serialize(instance.ParallelJoinWaits, _json);
@@ -44,6 +47,9 @@ public class EfInstanceStore : IInstanceStore
             await _storage.CreateProcessInstanceAsync(stored, ct);
         else
             await _storage.UpdateProcessInstanceAsync(stored, ct);
+
+        // Reflect back any provider-updated row version
+        instance.RowVersion = stored.RowVersion;
     }
 
     /// <inheritdoc />
@@ -57,7 +63,8 @@ public class EfInstanceStore : IInstanceStore
             Id = stored.Id,
             ProcessDefinitionId = stored.ProcessDefinitionId,
             ProcessKey = stored.ProcessKey,
-            IsCompleted = stored.Status == ProcessInstanceStatus.Completed
+            IsCompleted = stored.Status == ProcessInstanceStatus.Completed,
+            RowVersion = stored.RowVersion
         };
 
         // Deserialize serialized state back into runtime instance

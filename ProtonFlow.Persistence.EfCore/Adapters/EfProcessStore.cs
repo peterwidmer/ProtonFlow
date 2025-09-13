@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml.Linq;
 using BpmnEngine.Interfaces;
 using BpmnEngine.Models;
 using ProtonFlow.Persistence.EfCore.Storage;
@@ -63,14 +64,57 @@ public class EfProcessStore : IProcessStore
 
     private static ProcessDefinition MapRuntime(StoredProcessDefinition stored)
     {
-        // Rebuild lightweight runtime definition (without element model reconstruction - parsing occurs elsewhere on load by engine).
+        // Parse the XML to rebuild the elements dictionary so that StartAsync can find start events
+        var elements = ParseElementsFromXml(stored.Xml);
+
         return new ProcessDefinition(
             id: stored.Id,
             key: stored.Key,
             name: stored.Name,
             xml: stored.Xml,
-            elements: new Dictionary<string, BpmnElement>() // engine will re-parse on LoadBpmnXml; persisted def used mainly for lookup.
+            elements: elements
         );
+    }
+
+    private static Dictionary<string, BpmnElement> ParseElementsFromXml(string xml)
+    {
+        var elements = new Dictionary<string, BpmnElement>();
+        var xdoc = XDocument.Parse(xml);
+        var process = xdoc.Root!.Descendants().FirstOrDefault(e => e.Name.LocalName == "process");
+
+        if (process == null) return elements;
+
+        foreach (var el in process.Descendants())
+        {
+            var id = el.Attribute("id")?.Value;
+            if (string.IsNullOrWhiteSpace(id)) continue;
+
+            switch (el.Name.LocalName)
+            {
+                case "startEvent":
+                    elements[id] = new StartEvent(id);
+                    break;
+                case "endEvent":
+                    elements[id] = new EndEvent(id);
+                    break;
+                case "serviceTask":
+                    var implType = el.Attribute("implementation")?.Value ?? el.Attribute("type")?.Value ?? "";
+                    elements[id] = new ServiceTask(id, implType);
+                    break;
+                case "scriptTask":
+                    var script = el.Value;
+                    elements[id] = new ScriptTask(id, script);
+                    break;
+                case "exclusiveGateway":
+                    elements[id] = new ExclusiveGateway(id);
+                    break;
+                case "parallelGateway":
+                    elements[id] = new ParallelGateway(id);
+                    break;
+            }
+        }
+
+        return elements;
     }
 
     private static string ComputeHash(string xml)

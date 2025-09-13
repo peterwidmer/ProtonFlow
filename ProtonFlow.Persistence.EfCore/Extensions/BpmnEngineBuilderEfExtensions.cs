@@ -30,6 +30,7 @@ public static class BpmnEngineBuilderEfExtensions
             // Adapter registrations to satisfy existing engine persistence contracts
             services.AddScoped<IProcessStore, EfProcessStore>();
             services.AddScoped<IInstanceStore, EfInstanceStore>();
+            services.AddScoped<IJobStore, EfJobStore>();
             services.AddScoped<IProcessExecutor, SimpleProcessExecutor>();
             services.AddScoped<BpmnRuntimeEngine>();
         });
